@@ -1,0 +1,95 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MEDVID</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-bg" aria-hidden="true"></div>
+    <main class="site-shell">
+      <header class="site-header glass">
+        <div class="brand-block">
+          <h1>MEDVID</h1>
+        </div>
+      </header>
+
+      <section class="auth-panel hidden glass" id="auth-card">
+        <h2>WebDAV Login</h2>
+        <p class="subtitle">Sign in to browse and download files.</p>
+
+        <form id="login-form">
+          <label>
+            WebDAV URL
+            <input name="serverUrl" type="url" placeholder="https://example.com/remote.php/dav/files/user" value="https://dav.mypikpak.com" required />
+          </label>
+          <label>
+            Username
+            <input name="username" type="text" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" required />
+          </label>
+          <label>
+            Base Path (optional)
+            <input name="basePath" type="text" placeholder="/" value="/" />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+        <p id="auth-message"></p>
+      </section>
+
+      <section class="explorer-shell hidden" id="explorer-card">
+        <section class="content-panel glass">
+          <div class="path-head">
+            <div>
+              <p class="eyebrow">Current Path</p>
+              <strong id="current-path">/</strong>
+            </div>
+            <button id="logout-btn" class="secondary">Logout</button>
+          </div>
+
+          <form id="nav-form" class="nav-bar" autocomplete="off">
+            <div class="nav-actions">
+              <button type="button" id="nav-back" class="nav-btn">Back</button>
+              <button type="button" id="nav-forward" class="nav-btn">Forward</button>
+              <button type="button" id="nav-up" class="nav-btn">Up</button>
+              <button type="button" id="nav-home" class="nav-btn">Home</button>
+            </div>
+            <div class="nav-path-wrap">
+              <input id="nav-path-input" type="text" placeholder="/Books" />
+              <button type="submit" class="nav-go">Go</button>
+            </div>
+          </form>
+
+          <div id="breadcrumb" class="breadcrumb"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Last Modified</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="file-list"></tbody>
+            </table>
+          </div>
+          <div id="mobile-file-list" class="mobile-file-list"></div>
+
+          <p id="explorer-message"></p>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
