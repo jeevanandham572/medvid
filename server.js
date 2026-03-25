@@ -14,7 +14,7 @@ const AUTO_LOGIN = {
   basePath: process.env.WEBDAV_BASE_PATH || "/"
 };
 const PUBLIC_MODE = true;
-const PUBLIC_ALLOWED_FOLDERS = ["/Prepladder RR 6.0 Videos and Notes"];
+const PUBLIC_ALLOWED_FOLDERS = ["/Prepladder RR 6.0 Videos and Notes", "/Prepladder Version X Videos and Notes"];
 
 app.use(morgan("dev"));
 app.use(express.json());
@@ -35,7 +35,7 @@ app.use(
 
 app.use(express.static(path.join(__dirname, "public")));
 
-function createDavClientFromSession(req) {
+async function createDavClientFromSession(req) {
   const creds = req.session.webdav;
   if (!creds) {
     return null;
@@ -138,6 +138,46 @@ function isAllowedRelativePath(relativePath) {
   );
 }
 
+function getMimeType(fileName) {
+  const ext = path.posix.extname(fileName).toLowerCase();
+  const mimeMap = {
+    ".mp4": "video/mp4",
+    ".mkv": "video/x-matroska",
+    ".webm": "video/webm",
+    ".m3u8": "application/vnd.apple.mpegurl",
+    ".ts": "video/mp2t",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg"
+  };
+  return mimeMap[ext] || "application/octet-stream";
+}
+
+function encodePathForUrl(inputPath) {
+  return inputPath
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function buildDirectWebdavUrl(serverUrl, username, password, absolutePath) {
+  const url = new URL(serverUrl);
+  const basePathname = url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
+  const normalizedAbsolutePath = absolutePath.startsWith("/") ? absolutePath : `/${absolutePath}`;
+  const combinedPath = path.posix.normalize(`${basePathname}${normalizedAbsolutePath}`);
+
+  url.username = username;
+  url.password = password;
+  url.pathname = encodePathForUrl(combinedPath);
+  url.search = "";
+  url.hash = "";
+
+  return url.toString();
+}
+
 app.post("/api/login", async (req, res) => {
   if (PUBLIC_MODE) {
     return res.status(403).json({ error: "Manual login is disabled in public mode." });
@@ -199,7 +239,7 @@ app.get("/api/session", async (req, res) => {
 });
 
 app.get("/api/list", requireLogin, async (req, res) => {
-  const client = createDavClientFromSession(req);
+  const client = await createDavClientFromSession(req);
   const creds = req.session.webdav;
 
   try {
@@ -230,7 +270,10 @@ app.get("/api/list", requireLogin, async (req, res) => {
         if (a.type !== b.type) {
           return a.type === "directory" ? -1 : 1;
         }
-        return a.basename.localeCompare(b.basename);
+        return a.basename.localeCompare(b.basename, undefined, {
+          sensitivity: "base",
+          numeric: true
+        });
       });
 
     return res.json({
@@ -243,13 +286,111 @@ app.get("/api/list", requireLogin, async (req, res) => {
   }
 });
 
+app.get("/api/stream", requireLogin, async (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) {
+    return res.status(400).json({ error: "path query parameter is required." });
+  }
+
+  const client = await createDavClientFromSession(req);
+  const creds = req.session.webdav;
+
+  try {
+    const relativePath = normalizeRelativePath(filePath);
+    if (!isAllowedRelativePath(relativePath)) {
+      return res.status(403).json({ error: "Access denied for this file." });
+    }
+
+    const fullPath = normalizePath(creds.basePath, relativePath);
+    const fileName = path.posix.basename(fullPath);
+
+    const stat = await client.stat(fullPath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    res.setHeader("Content-Disposition", `inline; filename=\"${fileName}\"`);
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = end - start + 1;
+
+      const head = {
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunksize,
+        "Content-Type": getMimeType(fileName)
+      };
+      res.writeHead(206, head);
+      const stream = client.createReadStream(fullPath, {
+        range: { start, end }
+      });
+      stream.on("error", () => {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to read remote file stream." });
+        } else {
+          res.end();
+        }
+      });
+      stream.pipe(res);
+    } else {
+      const head = {
+        "Content-Length": fileSize,
+        "Content-Type": getMimeType(fileName)
+      };
+      res.writeHead(200, head);
+      const stream = client.createReadStream(fullPath);
+      stream.on("error", () => {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to read remote file stream." });
+        } else {
+          res.end();
+        }
+      });
+      stream.pipe(res);
+    }
+  } catch (error) {
+    console.error("Stream error", error);
+    return res.status(500).json({ error: "Unable to stream file." });
+  }
+});
+
+app.get("/api/play-url", requireLogin, async (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) {
+    return res.status(400).json({ error: "path query parameter is required." });
+  }
+  const creds = req.session.webdav;
+
+  try {
+    const relativePath = normalizeRelativePath(filePath);
+    if (!isAllowedRelativePath(relativePath)) {
+      return res.status(403).json({ error: "Access denied for this file." });
+    }
+
+    const fullPath = normalizePath(creds.basePath, relativePath);
+    const directUrl = buildDirectWebdavUrl(
+      creds.serverUrl,
+      creds.username,
+      creds.password,
+      fullPath
+    );
+
+    return res.json({ url: directUrl });
+  } catch (error) {
+    console.error("Play URL error", error);
+    return res.status(500).json({ error: "Unable to generate play URL." });
+  }
+});
+
 app.get("/api/download", requireLogin, async (req, res) => {
   const filePath = req.query.path;
   if (!filePath) {
     return res.status(400).json({ error: "path query parameter is required." });
   }
 
-  const client = createDavClientFromSession(req);
+  const client = await createDavClientFromSession(req);
   const creds = req.session.webdav;
 
   try {
@@ -267,8 +408,9 @@ app.get("/api/download", requireLogin, async (req, res) => {
     const fileName = path.posix.basename(fullPath);
     const stream = client.createReadStream(fullPath);
 
-    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
-    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename=\"${fileName}\"`);
+    res.setHeader("Content-Type", getMimeType(fileName));
+    res.setHeader("Accept-Ranges", "bytes");
 
     stream.on("error", () => {
       if (!res.headersSent) {
@@ -280,10 +422,15 @@ app.get("/api/download", requireLogin, async (req, res) => {
 
     stream.pipe(res);
   } catch (error) {
+    console.error("Download error", error);
     return res.status(500).json({ error: "Unable to download file." });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`WebDAV explorer running at http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`WebDAV explorer running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;

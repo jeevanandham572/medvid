@@ -5,8 +5,7 @@ const authMessage = document.getElementById("auth-message");
 const explorerMessage = document.getElementById("explorer-message");
 const currentPathEl = document.getElementById("current-path");
 const breadcrumbEl = document.getElementById("breadcrumb");
-const fileList = document.getElementById("file-list");
-const mobileFileList = document.getElementById("mobile-file-list");
+const entryGrid = document.getElementById("entry-grid");
 const logoutBtn = document.getElementById("logout-btn");
 const navForm = document.getElementById("nav-form");
 const navBackBtn = document.getElementById("nav-back");
@@ -14,12 +13,22 @@ const navForwardBtn = document.getElementById("nav-forward");
 const navUpBtn = document.getElementById("nav-up");
 const navHomeBtn = document.getElementById("nav-home");
 const navPathInput = document.getElementById("nav-path-input");
+const collectionTitle = document.getElementById("collection-title");
+const collectionMeta = document.getElementById("collection-meta");
+const detailName = document.getElementById("detail-name");
+const detailType = document.getElementById("detail-type");
+const detailSize = document.getElementById("detail-size");
+const detailModified = document.getElementById("detail-modified");
+const detailPath = document.getElementById("detail-path");
+const detailWatch = document.getElementById("detail-watch");
 const loadingScreen = document.getElementById("loading-screen");
 
 let currentPath = "/";
 let publicMode = false;
 let navHistory = ["/"];
 let navIndex = 0;
+let currentEntries = [];
+let selectedPath = null;
 
 function formatBytes(bytes) {
   if (!bytes) return "-";
@@ -31,12 +40,6 @@ function formatBytes(bytes) {
     i += 1;
   }
   return `${value.toFixed(value > 10 ? 0 : 1)} ${units[i]}`;
-}
-
-function setAuthState(isAuthenticated) {
-  authCard.classList.toggle("hidden", isAuthenticated || publicMode);
-  explorerCard.classList.toggle("hidden", !isAuthenticated);
-  logoutBtn.classList.toggle("hidden", publicMode);
 }
 
 function normalizeClientPath(pathValue = "/") {
@@ -53,6 +56,12 @@ function getParentPath(pathValue) {
     return "/";
   }
   return pathValue.split("/").slice(0, -1).join("/") || "/";
+}
+
+function setAuthState(isAuthenticated) {
+  authCard.classList.toggle("hidden", isAuthenticated || publicMode);
+  explorerCard.classList.toggle("hidden", !isAuthenticated);
+  logoutBtn.classList.toggle("hidden", publicMode);
 }
 
 function pushHistory(pathValue) {
@@ -72,15 +81,31 @@ function updateNavControls() {
   navPathInput.value = currentPath;
 }
 
-function createCell(label, value) {
-  const td = document.createElement("td");
-  td.dataset.label = label;
-  if (value instanceof Node) {
-    td.appendChild(value);
-  } else {
-    td.textContent = value;
+function updateDetails(entry) {
+  if (!entry) {
+    detailName.textContent = "No item selected";
+    detailType.textContent = "-";
+    detailSize.textContent = "-";
+    detailModified.textContent = "-";
+    detailPath.textContent = "-";
+    detailWatch.classList.add("hidden");
+    detailWatch.removeAttribute("href");
+    return;
   }
-  return td;
+
+  detailName.textContent = entry.basename;
+  detailType.textContent = entry.type;
+  detailSize.textContent = entry.type === "file" ? formatBytes(entry.size) : "-";
+  detailModified.textContent = entry.lastmod || "-";
+  detailPath.textContent = entry.path;
+
+  if (entry.type === "file") {
+    detailWatch.href = `/watch.html?path=${encodeURIComponent(entry.path)}`;
+    detailWatch.classList.remove("hidden");
+  } else {
+    detailWatch.classList.add("hidden");
+    detailWatch.removeAttribute("href");
+  }
 }
 
 function buildBreadcrumb(pathValue) {
@@ -102,6 +127,7 @@ function buildBreadcrumb(pathValue) {
   segments.forEach((segment) => {
     const sep = document.createElement("span");
     sep.textContent = "/";
+    sep.style.color = "#64748b";
     breadcrumbEl.appendChild(sep);
 
     running += `/${segment}`;
@@ -114,151 +140,114 @@ function buildBreadcrumb(pathValue) {
   });
 }
 
-function buildNameContent(entry) {
-  if (entry.type === "directory") {
-    const btn = document.createElement("button");
-    btn.className = "link-btn";
-    btn.textContent = `${entry.basename}/`;
-    btn.addEventListener("click", () => loadDirectory(entry.path));
-    return btn;
+function getCollectionName(pathValue) {
+  if (!pathValue || pathValue === "/") {
+    return "Library";
   }
-  return document.createTextNode(entry.basename);
+  const parts = pathValue.split("/").filter(Boolean);
+  return parts[parts.length - 1] || "Library";
 }
 
-function buildMobileNameContent(entry) {
-  if (entry.type === "directory") {
-    const btn = document.createElement("button");
-    btn.className = "link-btn mobile-name";
-    btn.textContent = `${entry.basename}/`;
-    btn.addEventListener("click", () => loadDirectory(entry.path));
-    return btn;
-  }
+function selectEntry(entryPath) {
+  selectedPath = entryPath;
+  const selected = currentEntries.find((entry) => entry.path === entryPath) || null;
+  updateDetails(selected);
 
-  const span = document.createElement("span");
-  span.className = "mobile-name";
-  span.textContent = entry.basename;
-  return span;
-}
-
-function createMobileItem({ nameNode, type, sizeText, dateText, actionNode }) {
-  const item = document.createElement("article");
-  item.className = "mobile-item";
-
-  const top = document.createElement("div");
-  top.className = "mobile-item-top";
-  top.appendChild(nameNode);
-  if (actionNode) {
-    top.appendChild(actionNode);
-  }
-  item.appendChild(top);
-
-  const meta = document.createElement("div");
-  meta.className = "mobile-meta";
-
-  const typePill = document.createElement("span");
-  typePill.className = "mobile-pill";
-  typePill.textContent = type;
-  meta.appendChild(typePill);
-
-  const sizePill = document.createElement("span");
-  sizePill.className = "mobile-pill";
-  sizePill.textContent = sizeText;
-  meta.appendChild(sizePill);
-
-  item.appendChild(meta);
-
-  const date = document.createElement("p");
-  date.className = "mobile-date";
-  date.textContent = dateText || "-";
-  item.appendChild(date);
-
-  return item;
-}
-
-function renderMobileEntries(entries, pathValue) {
-  mobileFileList.innerHTML = "";
-
-  if (pathValue !== "/") {
-    const upBtn = document.createElement("button");
-    upBtn.className = "link-btn mobile-name";
-    upBtn.textContent = "../";
-    upBtn.addEventListener("click", () => loadDirectory(getParentPath(pathValue)));
-
-    mobileFileList.appendChild(
-      createMobileItem({
-        nameNode: upBtn,
-        type: "directory",
-        sizeText: "-",
-        dateText: "-",
-        actionNode: null
-      })
-    );
-  }
-
-  entries.forEach((entry) => {
-    let actionNode = null;
-    if (entry.type === "file") {
-      const dl = document.createElement("a");
-      dl.className = "mobile-action";
-      dl.href = `/api/download?path=${encodeURIComponent(entry.path)}`;
-      dl.textContent = "Download";
-      actionNode = dl;
-    }
-
-    mobileFileList.appendChild(
-      createMobileItem({
-        nameNode: buildMobileNameContent(entry),
-        type: entry.type,
-        sizeText: entry.type === "file" ? formatBytes(entry.size) : "-",
-        dateText: entry.lastmod || "-",
-        actionNode
-      })
-    );
+  document.querySelectorAll(".entry-card").forEach((card) => {
+    const isSelected = card.dataset.path === entryPath;
+    card.classList.toggle("selected", isSelected);
   });
+}
+
+function createEntryCard(entry) {
+  const card = document.createElement("article");
+  card.className = "entry-card";
+  card.dataset.path = entry.path;
+
+  const icon = document.createElement("div");
+  icon.className = "entry-icon";
+  icon.textContent = entry.type === "directory" ? "📁" : "🎬";
+  card.appendChild(icon);
+
+  const nameWrap = document.createElement("div");
+  if (entry.type === "directory") {
+    const btn = document.createElement("button");
+    btn.className = "entry-name-btn";
+    btn.textContent = entry.basename;
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      loadDirectory(entry.path);
+    });
+    nameWrap.appendChild(btn);
+  } else {
+    const p = document.createElement("p");
+    p.className = "entry-name";
+    p.textContent = entry.basename;
+    nameWrap.appendChild(p);
+  }
+  card.appendChild(nameWrap);
+
+  const meta = document.createElement("p");
+  meta.className = "entry-meta";
+  meta.textContent = entry.type === "file"
+    ? `${formatBytes(entry.size)} • ${entry.lastmod || "-"}`
+    : `${entry.lastmod || "Folder"}`;
+  card.appendChild(meta);
+
+  if (entry.type === "file") {
+    const watch = document.createElement("a");
+    watch.className = "action-watch";
+    watch.href = `/watch.html?path=${encodeURIComponent(entry.path)}`;
+    watch.target = "_blank";
+    watch.rel = "noopener";
+    watch.textContent = "Watch Video";
+    card.appendChild(watch);
+  }
+
+  card.addEventListener("click", () => selectEntry(entry.path));
+  return card;
 }
 
 function renderEntries(entries, pathValue) {
-  fileList.innerHTML = "";
+  entryGrid.innerHTML = "";
+  currentEntries = entries;
 
   if (pathValue !== "/") {
-    const row = document.createElement("tr");
-    const upBtn = document.createElement("button");
-    upBtn.className = "link-btn";
-    upBtn.textContent = "..";
-
-    const parentPath = pathValue.split("/").slice(0, -1).join("/") || "/";
-    upBtn.addEventListener("click", () => loadDirectory(parentPath));
-
-    row.appendChild(createCell("Name", upBtn));
-    row.appendChild(createCell("Type", "directory"));
-    row.appendChild(createCell("Size", "-"));
-    row.appendChild(createCell("Last Modified", "-"));
-    row.appendChild(createCell("Action", "-"));
-
-    fileList.appendChild(row);
+    const upEntry = {
+      basename: "..",
+      path: getParentPath(pathValue),
+      type: "directory",
+      size: 0,
+      lastmod: "Parent folder"
+    };
+    const upCard = createEntryCard(upEntry);
+    upCard.querySelector(".entry-icon").textContent = "↩";
+    const upBtn = upCard.querySelector(".entry-name-btn");
+    if (upBtn) {
+      upBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        loadDirectory(upEntry.path);
+      });
+    }
+    upCard.addEventListener("click", () => loadDirectory(upEntry.path));
+    entryGrid.appendChild(upCard);
   }
 
   entries.forEach((entry) => {
-    const row = document.createElement("tr");
-
-    row.appendChild(createCell("Name", buildNameContent(entry)));
-    row.appendChild(createCell("Type", entry.type));
-    row.appendChild(createCell("Size", entry.type === "file" ? formatBytes(entry.size) : "-"));
-    row.appendChild(createCell("Last Modified", entry.lastmod || "-"));
-
-    if (entry.type === "file") {
-      const dl = document.createElement("a");
-      dl.href = `/api/download?path=${encodeURIComponent(entry.path)}`;
-      dl.textContent = "Download";
-      row.appendChild(createCell("Action", dl));
-    } else {
-      row.appendChild(createCell("Action", "-"));
-    }
-
-    fileList.appendChild(row);
+    entryGrid.appendChild(createEntryCard(entry));
   });
 
-  renderMobileEntries(entries, pathValue);
+  const fileCount = entries.filter((entry) => entry.type === "file").length;
+  const folderCount = entries.filter((entry) => entry.type === "directory").length;
+  collectionTitle.textContent = getCollectionName(pathValue);
+  collectionMeta.textContent = `${entries.length} items • ${folderCount} folders • ${fileCount} files`;
+
+  if (entries.length > 0) {
+    selectEntry(entries[0].path);
+  } else {
+    selectedPath = null;
+    updateDetails(null);
+  }
 }
 
 async function loadDirectory(pathValue = "/", options = {}) {
@@ -283,6 +272,7 @@ async function loadDirectory(pathValue = "/", options = {}) {
   if (recordHistory) {
     pushHistory(currentPath);
   }
+
   currentPathEl.textContent = currentPath;
   buildBreadcrumb(currentPath);
   renderEntries(payload.entries, currentPath);
@@ -299,9 +289,7 @@ loginForm.addEventListener("submit", async (event) => {
 
   const response = await fetch("/api/login", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
 
@@ -320,20 +308,20 @@ logoutBtn.addEventListener("click", async () => {
   await fetch("/api/logout", { method: "POST" });
   setAuthState(false);
   loginForm.reset();
-  fileList.innerHTML = "";
   currentPath = "/";
   navHistory = ["/"];
   navIndex = 0;
-  currentPathEl.textContent = currentPath;
+  entryGrid.innerHTML = "";
   breadcrumbEl.innerHTML = "";
-  explorerMessage.textContent = "";
+  currentPathEl.textContent = "/";
+  collectionTitle.textContent = "Library";
+  collectionMeta.textContent = "0 items";
+  updateDetails(null);
   updateNavControls();
 });
 
 navBackBtn.addEventListener("click", async () => {
-  if (navIndex <= 0) {
-    return;
-  }
+  if (navIndex <= 0) return;
   const previousIndex = navIndex - 1;
   const ok = await loadDirectory(navHistory[previousIndex], { recordHistory: false });
   if (ok) {
@@ -343,9 +331,7 @@ navBackBtn.addEventListener("click", async () => {
 });
 
 navForwardBtn.addEventListener("click", async () => {
-  if (navIndex >= navHistory.length - 1) {
-    return;
-  }
+  if (navIndex >= navHistory.length - 1) return;
   const nextIndex = navIndex + 1;
   const ok = await loadDirectory(navHistory[nextIndex], { recordHistory: false });
   if (ok) {
@@ -378,10 +364,12 @@ async function restoreSession() {
       setAuthState(true);
       explorerMessage.textContent = "Unable to auto-connect to WebDAV right now.";
       updateNavControls();
+      updateDetails(null);
       return;
     }
     setAuthState(false);
     updateNavControls();
+    updateDetails(null);
     return;
   }
 

@@ -6,21 +6,21 @@
     <title>MEDVID</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="page-bg" aria-hidden="true"></div>
-    <main class="site-shell">
-      <header class="site-header glass">
-        <div class="brand-block">
-          <h1>MEDVID</h1>
-        </div>
-      </header>
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite">
+      <div class="loading-content">
+        <h2>MEDVID</h2>
+        <p>Loading your workspace...</p>
+      </div>
+    </div>
 
-      <section class="auth-panel hidden glass" id="auth-card">
+    <main class="app-shell">
+      <section class="auth-panel hidden panel" id="auth-card">
         <h2>WebDAV Login</h2>
-        <p class="subtitle">Sign in to browse and download files.</p>
+        <p class="sub">Sign in to browse and stream files.</p>
 
         <form id="login-form">
           <label>
@@ -44,49 +44,82 @@
         <p id="auth-message"></p>
       </section>
 
-      <section class="explorer-shell hidden" id="explorer-card">
-        <section class="content-panel glass">
-          <div class="path-head">
+      <section id="explorer-card" class="explorer hidden">
+        <aside class="panel rail">
+          <div class="brand">
+            <div class="brand-icon">▶</div>
             <div>
-              <p class="eyebrow">Current Path</p>
-              <strong id="current-path">/</strong>
+              <h1>MEDVID</h1>
+              <p>File Explorer</p>
             </div>
-            <button id="logout-btn" class="secondary">Logout</button>
           </div>
 
-          <form id="nav-form" class="nav-bar" autocomplete="off">
-            <div class="nav-actions">
-              <button type="button" id="nav-back" class="nav-btn">Back</button>
-              <button type="button" id="nav-forward" class="nav-btn">Forward</button>
-              <button type="button" id="nav-up" class="nav-btn">Up</button>
-              <button type="button" id="nav-home" class="nav-btn">Home</button>
-            </div>
-            <div class="nav-path-wrap">
-              <input id="nav-path-input" type="text" placeholder="/Books" />
-              <button type="submit" class="nav-go">Go</button>
-            </div>
-          </form>
+          <div class="rail-group">
+            <p class="rail-label">Current Path</p>
+            <p id="current-path" class="path-text">/</p>
+          </div>
+
+          <div class="rail-group">
+            <p class="rail-label">Status</p>
+            <p class="rail-status">Connected</p>
+          </div>
+        </aside>
+
+        <section class="panel main-view">
+          <header class="topbar">
+            <form id="nav-form" class="nav-form" autocomplete="off">
+              <div class="nav-actions">
+                <button type="button" id="nav-back" class="nav-btn">◀</button>
+                <button type="button" id="nav-forward" class="nav-btn">▶</button>
+                <button type="button" id="nav-up" class="nav-btn">Up</button>
+                <button type="button" id="nav-home" class="nav-btn">Home</button>
+              </div>
+              <div class="nav-path-wrap">
+                <input id="nav-path-input" type="text" placeholder="/" />
+                <button type="submit" class="go-btn">Go</button>
+              </div>
+            </form>
+            <button id="logout-btn" class="logout-btn">Logout</button>
+          </header>
 
           <div id="breadcrumb" class="breadcrumb"></div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Size</th>
-                  <th>Last Modified</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="file-list"></tbody>
-            </table>
+          <div class="collection-head">
+            <h2 id="collection-title">Library</h2>
+            <p id="collection-meta">0 items</p>
           </div>
-          <div id="mobile-file-list" class="mobile-file-list"></div>
+
+          <div id="entry-grid" class="entry-grid"></div>
 
           <p id="explorer-message"></p>
         </section>
+
+        <aside class="panel details-view">
+          <h3>File Details</h3>
+          <div class="detail-box">
+            <p class="detail-label">Name</p>
+            <p id="detail-name" class="detail-value">No item selected</p>
+          </div>
+          <div class="detail-grid">
+            <div>
+              <p class="detail-label">Type</p>
+              <p id="detail-type" class="detail-value">-</p>
+            </div>
+            <div>
+              <p class="detail-label">Size</p>
+              <p id="detail-size" class="detail-value">-</p>
+            </div>
+            <div>
+              <p class="detail-label">Modified</p>
+              <p id="detail-modified" class="detail-value">-</p>
+            </div>
+            <div>
+              <p class="detail-label">Path</p>
+              <p id="detail-path" class="detail-value">-</p>
+            </div>
+          </div>
+          <a id="detail-watch" class="detail-watch hidden" target="_blank" rel="noopener">Watch Video</a>
+        </aside>
       </section>
     </main>
 

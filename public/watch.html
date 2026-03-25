@@ -1,0 +1,231 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MEDVID - Watch Video</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Manrope:wght@400;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.css" />
+    <style>
+      :root {
+        --line: #1f2a3e;
+        --panel: #121826;
+        --text: #e8eefb;
+        --muted: #8e9ab0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Manrope", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 14% 10%, rgba(72, 98, 255, 0.2), transparent 32%),
+          linear-gradient(180deg, #070a11, #0a0f18);
+      }
+      .loading-screen {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: rgba(7, 10, 17, 0.95);
+        transition: opacity 0.35s ease;
+      }
+      .loading-screen.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .spinner {
+        width: 46px;
+        height: 46px;
+        border-radius: 999px;
+        border: 4px solid #2a3550;
+        border-top-color: #6f84ff;
+        margin: 0 auto 0.75rem;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .loading-box {
+        text-align: center;
+      }
+      .loading-box p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .layout {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: 1fr 300px;
+      }
+      .viewer {
+        padding: 0.75rem;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: linear-gradient(180deg, #121a29, #0f1624);
+      }
+      .toolbar {
+        margin-bottom: 0.7rem;
+        padding: 0.65rem 0.8rem;
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+      }
+      .toolbar a {
+        color: #9fb1ff;
+        text-decoration: none;
+        font-weight: 700;
+      }
+      .path {
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .player-wrap {
+        padding: 0.65rem;
+      }
+      .plyr {
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .side {
+        border-left: 1px solid #1a2435;
+        background: rgba(10, 14, 22, 0.8);
+        padding: 0.85rem;
+      }
+      .side h2 {
+        margin: 0;
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 1.08rem;
+      }
+      .side p {
+        margin: 0.55rem 0 0;
+        color: var(--muted);
+        word-break: break-word;
+      }
+      .error {
+        color: #ff9b9b;
+        margin-top: 0.65rem;
+        font-weight: 600;
+      }
+      @media (max-width: 900px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .side {
+          border-left: 0;
+          border-top: 1px solid #1a2435;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite">
+      <div class="loading-box">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Preparing video stream...</p>
+      </div>
+    </div>
+
+    <div class="layout">
+      <section class="viewer">
+        <div class="toolbar panel">
+          <a href="/">← Back</a>
+          <span class="path" id="path">Loading...</span>
+        </div>
+        <div class="player-wrap panel">
+          <video id="player" controls playsinline preload="metadata"></video>
+          <p id="error" class="error"></p>
+        </div>
+      </section>
+
+      <aside class="side">
+        <h2>Now Playing</h2>
+        <p id="path-copy">-</p>
+      </aside>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3.7.8/dist/plyr.polyfilled.min.js"></script>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const pathValue = params.get("path");
+      const pathEl = document.getElementById("path");
+      const pathCopy = document.getElementById("path-copy");
+      const errorEl = document.getElementById("error");
+      const playerEl = document.getElementById("player");
+      const loadingScreen = document.getElementById("loading-screen");
+      const startTime = Date.now();
+      const minDelay = 3000;
+      const maxDelay = 5000;
+      let overlayHidden = false;
+
+      function hideLoading() {
+        if (overlayHidden) return;
+        overlayHidden = true;
+        loadingScreen.classList.add("hidden");
+      }
+
+      function hideLoadingWithMinDelay() {
+        const elapsed = Date.now() - startTime;
+        const wait = Math.max(0, minDelay - elapsed);
+        setTimeout(hideLoading, wait);
+      }
+
+      if (!pathValue) {
+        pathEl.textContent = "Missing file path.";
+        pathCopy.textContent = "Missing file path.";
+        hideLoadingWithMinDelay();
+      } else {
+        pathEl.textContent = pathValue;
+        pathCopy.textContent = pathValue;
+        const player = new Plyr(playerEl, {
+          controls: [
+            "play-large",
+            "play",
+            "progress",
+            "current-time",
+            "duration",
+            "mute",
+            "volume",
+            "settings",
+            "pip",
+            "fullscreen"
+          ]
+        });
+
+        player.on("error", () => {
+          errorEl.textContent = "Unable to stream this file format in browser.";
+          hideLoadingWithMinDelay();
+        });
+
+        fetch(`/api/play-url?path=${encodeURIComponent(pathValue)}`)
+          .then((response) => response.json())
+          .then((payload) => {
+            if (!payload.url) {
+              throw new Error(payload.error || "Play URL missing");
+            }
+            playerEl.src = payload.url;
+            playerEl.addEventListener("loadeddata", hideLoadingWithMinDelay, { once: true });
+            playerEl.addEventListener("canplay", hideLoadingWithMinDelay, { once: true });
+          })
+          .catch((error) => {
+            console.error("Play URL error", error);
+            errorEl.textContent = "Unable to generate direct playback URL.";
+            hideLoadingWithMinDelay();
+          });
+      }
+
+      setTimeout(hideLoading, maxDelay);
+    </script>
+  </body>
+</html>
