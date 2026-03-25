@@ -14,6 +14,7 @@ const navForwardBtn = document.getElementById("nav-forward");
 const navUpBtn = document.getElementById("nav-up");
 const navHomeBtn = document.getElementById("nav-home");
 const navPathInput = document.getElementById("nav-path-input");
+const loadingScreen = document.getElementById("loading-screen");
 
 let currentPath = "/";
 let publicMode = false;
@@ -391,3 +392,9 @@ async function restoreSession() {
 }
 
 restoreSession();
+
+setTimeout(() => {
+  if (loadingScreen) {
+    loadingScreen.classList.add("hidden");
+  }
+}, 3000);
