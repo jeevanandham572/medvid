@@ -2,7 +2,6 @@
 const express = require("express");
 const session = require("express-session");
 const morgan = require("morgan");
-const { createClient, AuthType } = require("webdav");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,12 +34,21 @@ app.use(
 
 app.use(express.static(path.join(__dirname, "public")));
 
+let webdavModulePromise;
+async function getWebdavModule() {
+  if (!webdavModulePromise) {
+    webdavModulePromise = import("webdav");
+  }
+  return webdavModulePromise;
+}
+
 async function createDavClientFromSession(req) {
   const creds = req.session.webdav;
   if (!creds) {
     return null;
   }
 
+  const { createClient, AuthType } = await getWebdavModule();
   return createClient(creds.serverUrl, {
     username: creds.username,
     password: creds.password,
@@ -57,6 +65,7 @@ async function tryAutoLogin(req) {
   }
 
   try {
+    const { createClient, AuthType } = await getWebdavModule();
     const client = createClient(AUTO_LOGIN.serverUrl, {
       username: AUTO_LOGIN.username,
       password: AUTO_LOGIN.password,
@@ -192,6 +201,7 @@ app.post("/api/login", async (req, res) => {
   const cleanedBasePath = basePath && basePath.trim() !== "" ? basePath.trim() : "/";
 
   try {
+    const { createClient, AuthType } = await getWebdavModule();
     const client = createClient(serverUrl, {
       username,
       password,
